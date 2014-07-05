@@ -1,3 +1,3 @@
 USAGE
 =====
-    $ brew tap cjones/homebrew-local
+    $ brew tap cjones/local
