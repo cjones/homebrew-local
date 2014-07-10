@@ -1,8 +1,6 @@
 require 'formula'
 
 class MPlayerDevelDownloadStrategy < SubversionDownloadStrategy
-  # custom downloader handles getting the right revisions of various
-  # other things in one shot before patch phase occurs.
 
   def initialize name, resource
     f = Formula['ffmpeg']
@@ -48,56 +46,46 @@ class MPlayerDevelDownloadStrategy < SubversionDownloadStrategy
 end
 
 class FormulaHamstringer < Requirement
-  # currently unused helper that when added as a depenency will cause
-  # the build to immediately abort (unless env BUILD_BROKEN_MPLAYER=yes).
-  # this was a courtesy to prevent accidentally installing 1000 deps for
-  # a package that was, at the time, not working yet.
   fatal true
   satisfy { ENV['BUILD_BROKEN_MPLAYER'] == 'yes' }
   def message; "This formula is disabled (still a work in progress)" end
 end
 
 class MplayerDevel < Formula
-  # a more rigorous attempt to produce a fully-featured mplayer similar to the
-  # one in macports mplayer-devel. the official mplayer formula is simpler, but
-  # woefully inaequate.
 
   homepage 'http://www.mplayerhq.hu/'
   conflicts_with 'mplayer', :because => 'Provides the same binaries.'
-  version "36449"
+  version '36449'
+  revision 1
 
-  url "svn://svn.mplayerhq.hu/mplayer/trunk", :using => MPlayerDevelDownloadStrategy,
-    :mplayer_rev => "#{version}",
-    :libdvd_rev => "1257",
-    :ffmpeg_ref => "09887096734eabaac5454b3fb5e4489457ac9434"
+  url 'svn://svn.mplayerhq.hu/mplayer/trunk',
+      :using       => MPlayerDevelDownloadStrategy,
+      :ffmpeg_ref  => "09887096734eabaac5454b3fb5e4489457ac9434",
+      :libdvd_rev  => "1257",
+      :mplayer_rev => version
 
-  # all the patches from various places (macports, inreplace stuff in other
-  # formulas) rolled up and applied at once.
   patch :DATA
 
-  # use similar options to macports variants, except make +osd/+extras on by default
-  option 'without-osd', 'Disable on-screen display (menus, etc)'
-  option 'without-encoders', 'Build without common encoders (x264, xvid, etc.)'
-  option 'with-openjpeg', 'Enable OpenJPEG support (currently broken)'
-  option 'with-debug', 'Compile with debugging symbols'
-  option 'with-esd', 'Enable EsounD audio output'
+  option 'without-osd',       'Disable on-screen display (menus, etc)'
+  option 'without-encoders',  'Build without common encoders (x264, xvid, etc.)'
+  option 'with-openjpeg',     'Enable OpenJPEG support (currently broken)'
+  option 'with-debug',        'Compile with debugging symbols'
+  option 'with-esd',          'Enable EsounD audio output'
+  option 'with-html-docs',    'Enable building HTML documentation'
 
-  # XXX small speed bump for careless people to avoid building all the things. remove later.
-  depends_on FormulaHamstringer
-
-  depends_on 'git' => :build
+  depends_on 'git'        => :build
   depends_on 'subversion' => :build
   depends_on 'pkg-config' => :build
-  depends_on 'yasm' => :build
+  depends_on 'yasm'       => :build
 
-  # XXX totally untested, i don't have mavericks.
-  depends_on "gcc" if MacOS.version >= :mountain_lion
+  if build.with? 'html-docs'
+    depends_on 'docbook'     => :build
+    depends_on 'docbook-xsl' => :build
+  end
 
-  # XXX i'm not sure how these work. the zlib dep added a --with-zlib option,
-  # but it still doesn't link against it if i specify. not sure i should care.
   depends_on 'libiconv' => :optional
-  depends_on 'ncurses' => :optional
-  depends_on 'zlib' => :optional
+  depends_on 'ncurses'  => :optional
+  depends_on 'zlib'     => :optional
 
   depends_on 'lame'
   depends_on 'libass'
@@ -111,20 +99,6 @@ class MplayerDevel < Formula
   depends_on 'opus'
   depends_on 'theora'
 
-  # XXX this seems to not get linked
-  if build.with? 'openjpeg'
-    depends_on 'openjpeg'
-  end
-
-  if build.with? 'esd'
-    depends_on 'esound'
-  end
-
-  if build.with? 'osd'
-    depends_on 'fontconfig'
-    depends_on 'freetype'
-  end
-
   if build.with? 'encoders'
     depends_on 'faac'
     depends_on 'libdv'
@@ -133,59 +107,149 @@ class MplayerDevel < Formula
     depends_on 'xvid'
   end
 
+  if build.with? 'osd'
+    depends_on 'fontconfig'
+    depends_on 'freetype'
+  end
+
+  depends_on 'openjpeg' if build.with? 'openjpeg'
+  depends_on 'esound' if build.with? 'esd'
+
+  if MacOS.version >= :mountain_lion
+    depends_on "gcc" => :build
+  end
+
   fails_with :clang do
     build 211
     cause 'Inline asm errors during compile on 32bit Snow Leopard.'
   end unless MacOS.prefer_64_bit?
 
-  def install
-    args = ["--prefix=#{prefix}", "--cc=#{ENV.cc}", "--host-cc=#{ENV.cc}", "--enable-png", "--enable-jpeg",
-            "--enable-liblzo", "--enable-theora", "--enable-libvorbis", "--enable-libopus", "--enable-mad",
-            "--disable-smb", "--disable-live", "--disable-cdparanoia", "--disable-fribidi", "--disable-enca",
-            "--disable-libcdio", "--disable-speex", "--disable-toolame", "--disable-xmms", "--disable-musepack",
-            "--disable-sdl", "--disable-aa", "--disable-caca", "--disable-x11", "--disable-gl", "--disable-arts",
-            "--disable-lirc", "--disable-mng", "--disable-libdirac-lavc",
-            "--disable-libschroedinger-lavc", "--disable-liba52", "--disable-gif", "--disable-apple-remote"]
-
+  def arch
     if MacOS.prefer_64_bit?
-      args << "--disable-qtx"
-      arch = "x86_64"
+      Hardware::CPU.arch_64_bit
     else
-      args << "--enable-qtx"
-      arch = "i386"
+      Hardware::CPU.arch_32_bit
+    end
+  end
+
+  def player;  'mplayer'          end
+  def encoder; 'mencoder'         end
+  def ident;   'midentify'        end
+  def lang;    'en'               end
+  def gdb;     'gdb3'             end
+  def conf;    etc/player         end
+  def docs;    share/'doc'/player end
+
+  def build_args; %W[
+    --prefix=#{prefix}
+    --bindir=#{bin}
+    --datadir=#{docs}
+    --mandir=#{man}
+    --confdir=#{conf}
+    --libdir=#{lib}
+    --codecsdir=#{lib}/codecs
+    --cc=#{ENV.cc}
+    --host-cc=#{ENV.cc}
+    --target=#{arch}-Darwin
+    --language=#{lang} ]
+  end
+
+  def enabled_features; %W[
+    --enable-macosx-bundle
+    --enable-macosx-finder
+    --enable-png
+    --enable-jpeg
+    --enable-liblzo
+    --enable-theora
+    --enable-libvorbis
+    --enable-libopus
+    --enable-mad
+    --enable-apple-remote ]
+  end
+
+  def disabled_features; %W[
+    --disable-smb
+    --disable-live
+    --disable-cdparanoia
+    --disable-fribidi
+    --disable-enca
+    --disable-libcdio
+    --disable-speex
+    --disable-toolame
+    --disable-xmms
+    --disable-musepack
+    --disable-sdl
+    --disable-aa
+    --disable-caca
+    --disable-x11
+    --disable-gl
+    --disable-arts
+    --disable-lirc
+    --disable-mng
+    --disable-libdirac-lavc
+    --disable-libschroedinger-lavc
+    --disable-liba52
+    --disable-gif
+    --disable-apple-ir ]
+  end
+
+  def configure_args
+    args = build_args + enabled_features + disabled_features
+    if build.without? 'encoders'
+      args += %W[--disable-xvid --disable-x264 --disable-faac --disable-libdv --disable-twolame]
     end
     if build.with? 'osd'
-      args << "--enable-menu"
+      args << '--enable-menu'
     else
-      args << "--disable-fontconfig" << "--disable-freetype"
+      args += %W[--disable-fontconfig --disable-freetype]
     end
+    if build.with? 'debug'
+      args += %W[--enable-debug=#{gdb} --disable-altivec]
+    end
+    if build.without? 'esd'
+      args << '--disable-esd'
+    end
+    if MacOS.prefer_64_bit?
+      args << '--disable-qtx'
+    else
+      args << '--enable-qtx'
+    end
+    return args
+  end
 
-    args += ["--disable-xvid", "--disable-x264", "--disable-faac", "--disable-libdv", "--disable-twolame"] if build.without? 'encoders'
-    args << '--enable-debug=gdb3' << '--disable-altivec' if build.with? 'debug'
-    args << "--disable-esd" if build.without? 'esd'
-    args << "--target=#{arch}-Darwin"
-
-    system "./configure", *args
-
+  def install
     ENV.O1 if ENV.compiler == :llvm
     ENV.append_to_cflags "-mdynamic-no-pic" if Hardware.is_32_bit? && Hardware::CPU.intel? && ENV.compiler == :clang
-    system "make"
 
-    # XXX remove this when finishing up.
-    odie "aborting before insstall phase"
-    system "make install"
+    (buildpath/'VERSION').write "devel-r#{version}" + (revision > 0 ? "_#{revision}" : "")
+
+    system "./configure", *configure_args
+    system "make", "-j#{ENV.make_jobs}", "mplayer", "mencoder", "V=1"
+    system "make", "doc" if build.with? 'html-docs'
+
+    bin.install 'mplayer' => player, 'mencoder' => encoder, 'TOOLS/midentify.sh' => ident
+    man1.install 'DOCS/man/en/mplayer.1' => "#{player}.1"
+    man1.install_symlink "#{player}.1" => "#{encoder}.1"
+    docs.install 'DOCS/HTML' => 'html' if build.with? 'html-docs'
+    docs.install 'DOCS/tech', 'AUTHORS', 'LICENSE', 'README', 'Changelog', 'Copyright'
+
+    mv 'etc/example.conf', 'etc/mplayer.conf'
+    Pathname.glob('etc/*.conf').each do |src|
+      dst = conf/src.basename
+      if dst.exist? && ! %x(diff src dst).empty?
+        old = etc/(src.basename.to_s + ".old")
+        rm old if old.exist?
+        mv dst, old
+      end
+      conf.install src
+    end
   end
 end
 
 __END__
-diff -rupN original/VERSION patched/VERSION
---- original/VERSION	1969-12-31 16:00:00.000000000 -0800
-+++ patched/VERSION	2014-07-09 02:55:48.000000000 -0700
-@@ -0,0 +1 @@
-+36449
 diff -rupN original/configure patched/configure
 --- original/configure	2013-09-14 03:57:24.000000000 -0700
-+++ patched/configure	2014-07-09 02:54:15.000000000 -0700
++++ patched/configure	2014-07-10 04:35:43.000000000 -0700
 @@ -1507,8 +1507,7 @@ if test -e ffmpeg/mp_auto_pull ; then
  fi
  
@@ -248,6 +312,65 @@ diff -rupN original/configure patched/configure
  fi
  echores "$_qtx"
  
+@@ -8041,6 +8047,7 @@ extra_ldflags="$extra_ldflags -lm"
+ # XML documentation tests
+ echocheck "XML catalogs"
+ for try_catalog in \
++  /usr/local/etc/xml/catalog \
+   /etc/sgml/catalog \
+   /usr/share/xml/docbook/*/catalog.xml \
+   /opt/local/share/xml/docbook-xml/*/catalog.xml \
+@@ -8068,6 +8075,7 @@ fi
+ 
+ echocheck "XML chunked stylesheet"
+ for try_chunk_xsl in \
++  /usr/local/opt/docbook-xsl/docbook-xsl/html/chunk.xsl \
+   /usr/share/xml/docbook/*/html/chunk.xsl \
+   /usr/share/sgml/docbook/stylesheet/xsl/nwalsh/html/chunk.xsl \
+   /usr/share/sgml/docbook/yelp/docbook/html/chunk.xsl \
+@@ -8084,7 +8092,7 @@ for try_chunk_xsl in \
+ done
+ 
+ if test -z "$chunk_xsl"; then
+-  chunk_xsl=/usr/share/sgml/docbook/stylesheet/xsl/nwalsh/html/chunk.xsl
++  chunk_xsl=/usr/local/opt/docbook-xsl/docbook-xsl/html/chunk.xsl
+   echores "not found, using default"
+   fake_chunk_xsl=yes
+ else
+@@ -8093,6 +8101,7 @@ fi
+ 
+ echocheck "XML monolithic stylesheet"
+ for try_docbook_xsl in \
++  /usr/local/opt/docbook-xsl/docbook-xsl/html/docbook.xsl \
+   /usr/share/xml/docbook/*/html/docbook.xsl \
+   /usr/share/sgml/docbook/stylesheet/xsl/nwalsh/html/docbook.xsl \
+   /usr/share/sgml/docbook/yelp/docbook/html/docbook.xsl \
+@@ -8109,7 +8118,7 @@ for try_docbook_xsl in \
+ done
+ 
+ if test -z "$docbook_xsl"; then
+-  docbook_xsl=/usr/share/sgml/docbook/stylesheet/xsl/nwalsh/html/docbook.xsl
++  docbook_xsl=/usr/local/opt/docbook-xsl/docbook-xsl/html/docbook.xsl
+   echores "not found, using default"
+ else
+   echores "docbook.xsl"
+@@ -8146,6 +8155,7 @@ EOF
+ echocheck "XML DTD"
+ #FIXME: This should prefer higher version numbers, not the other way around ..
+ for try_dtd in \
++  /usr/local/opt/docbook/docbook/xml/4*/docbookx.dtd \
+   /usr/share/xml/docbook/*/dtd/4*/docbookx.dtd \
+   /usr/share/xml/docbook/*/docbookx.dtd \
+   /usr/share/sgml/docbook/*/docbookx.dtd \
+@@ -8161,7 +8171,7 @@ for try_dtd in \
+ done
+ 
+ if test -z "$dtd"; then
+-  dtd=/usr/share/sgml/docbook/dtd/xml/4.1.2/docbookx.dtd
++  dtd=/usr/local/opt/docbook/docbook/xml/4.1.2/docbookx.dtd
+   echores "not found, using default"
+ else
+   echores "docbookx.dtd"
 diff -rupN original/ffmpeg/configure patched/ffmpeg/configure
 --- original/ffmpeg/configure	2014-07-08 14:56:26.000000000 -0700
 +++ patched/ffmpeg/configure	2014-07-08 15:27:34.000000000 -0700
