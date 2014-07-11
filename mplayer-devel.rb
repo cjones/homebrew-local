@@ -56,25 +56,40 @@ class MplayerDevel < Formula
   homepage 'http://www.mplayerhq.hu/'
   conflicts_with 'mplayer', :because => 'Provides the same binaries.'
   version '36449'
-  revision 1
+  #version "37238"
+  revision 2
 
   url 'svn://svn.mplayerhq.hu/mplayer/trunk',
       :using       => MPlayerDevelDownloadStrategy,
+      :mplayer_rev => version,
       :ffmpeg_ref  => "09887096734eabaac5454b3fb5e4489457ac9434",
-      :libdvd_rev  => "1257",
-      :mplayer_rev => version
+      :libdvd_rev  => "1257"
+  #   :ffmpeg_ref  => "9195c26d454ca750359db87b1127cd4926c536bd",
+  #   :libdvd_rev  => "1294"
 
   patch :DATA
 
-  option 'without-osd',       'Disable on-screen display (menus, etc)'
-  option 'without-encoders',  'Build without common encoders (x264, xvid, etc.)'
-  option 'with-openjpeg',     'Enable OpenJPEG support (currently broken)'
-  option 'with-debug',        'Compile with debugging symbols'
-  option 'with-esd',          'Enable EsounD audio output'
-  option 'with-html-docs',    'Enable building HTML documentation'
+  option 'with-debug',           'Compile with debugging symbols'
+  option 'with-esd',             'Enable EsounD audio output'
+  option 'with-html-docs',       'Enable building HTML documentation'
+  option 'with-fribidi',         'Enable FriBidi Unicode support (implies --with-osd)'
+  option 'with-smb',             'Enable Samba support'
+  option 'with-speex',           'Enable Speex playback'
+  option 'with-dts',             'Enable non-passthrough DTS playback'
+  option 'with-sdl',             'Enable SDL video output'
+  option 'with-a52',             'Enable AC-3 codec support'
+  option 'with-dirac',           'Enable dirac codec support'
+  option 'with-aa',              'Enable animated ASCII art video output'
+  option 'with-caca',            'Enable animated ASCII art video output'
+  option 'without-osd',          'Disable on-screen display (menus, etc)'
+  option 'without-encoders',     'Build without common encoders (x264, xvid, etc.)'
+  option 'without-apple-remote', 'Disable Apple Infrared Remote support'
 
-  depends_on 'git'        => :build
-  depends_on 'subversion' => :build
+  #option 'with-openjpeg',       'Enable OpenJPEG support (currently broken)'
+  #depends_on FormulaHamstringer
+
+  depends_on 'git'        => [:build, :optional]
+  depends_on 'subversion' => [:build, :optional]
   depends_on 'pkg-config' => :build
   depends_on 'yasm'       => :build
 
@@ -82,6 +97,8 @@ class MplayerDevel < Formula
     depends_on 'docbook'     => :build
     depends_on 'docbook-xsl' => :build
   end
+
+  depends_on 'gcc' => :build if MacOS.version >= :mountain_lion
 
   depends_on 'libiconv' => :optional
   depends_on 'ncurses'  => :optional
@@ -92,7 +109,6 @@ class MplayerDevel < Formula
   depends_on 'libjpeg'
   depends_on 'libmad'
   depends_on 'libogg'
-  depends_on 'liboil'
   depends_on 'libpng'
   depends_on 'libvorbis'
   depends_on 'lzo'
@@ -107,17 +123,26 @@ class MplayerDevel < Formula
     depends_on 'xvid'
   end
 
-  if build.with? 'osd'
+  if build.with? 'osd' or build.with? 'fribidi'
     depends_on 'fontconfig'
     depends_on 'freetype'
   end
 
-  depends_on 'openjpeg' if build.with? 'openjpeg'
-  depends_on 'esound' if build.with? 'esd'
-
-  if MacOS.version >= :mountain_lion
-    depends_on "gcc" => :build
+  if build.with? 'dirac'
+    depends_on 'dirac'
+    depends_on 'schroedinger'
   end
+
+  depends_on 'esound' if build.with? 'esd'
+  depends_on 'fribidi' if build.with? 'fribidi'
+  depends_on 'samba' if build.with? 'smb'
+  depends_on 'speex' if build.with? 'speex'
+  depends_on 'libdca' if build.with? 'dts'
+  depends_on 'sdl' if build.with? 'sdl'
+  depends_on 'a52dec' if build.with? 'a52'
+  depends_on 'aalib' if build.with? 'aa'
+  depends_on 'libcaca' if build.with? 'caca'
+  #depends_on 'openjpeg' if build.with? 'openjpeg'
 
   fails_with :clang do
     build 211
@@ -140,79 +165,69 @@ class MplayerDevel < Formula
   def conf;    etc/player         end
   def docs;    share/'doc'/player end
 
-  def build_args; %W[
-    --prefix=#{prefix}
-    --bindir=#{bin}
-    --datadir=#{docs}
-    --mandir=#{man}
-    --confdir=#{conf}
-    --libdir=#{lib}
-    --codecsdir=#{lib}/codecs
-    --cc=#{ENV.cc}
-    --host-cc=#{ENV.cc}
-    --target=#{arch}-Darwin
-    --language=#{lang} ]
-  end
-
-  def enabled_features; %W[
-    --enable-macosx-bundle
-    --enable-macosx-finder
-    --enable-png
-    --enable-jpeg
-    --enable-liblzo
-    --enable-theora
-    --enable-libvorbis
-    --enable-libopus
-    --enable-mad
-    --enable-apple-remote ]
-  end
-
-  def disabled_features; %W[
-    --disable-smb
-    --disable-live
-    --disable-cdparanoia
-    --disable-fribidi
-    --disable-enca
-    --disable-libcdio
-    --disable-speex
-    --disable-toolame
-    --disable-xmms
-    --disable-musepack
-    --disable-sdl
-    --disable-aa
-    --disable-caca
-    --disable-x11
-    --disable-gl
-    --disable-arts
-    --disable-lirc
-    --disable-mng
-    --disable-libdirac-lavc
-    --disable-libschroedinger-lavc
-    --disable-liba52
-    --disable-gif
-    --disable-apple-ir ]
-  end
-
   def configure_args
-    args = build_args + enabled_features + disabled_features
-    if build.without? 'encoders'
-      args += %W[--disable-xvid --disable-x264 --disable-faac --disable-libdv --disable-twolame]
-    end
-    if build.with? 'osd'
-      args << '--enable-menu'
-    else
-      args += %W[--disable-fontconfig --disable-freetype]
-    end
-    if build.with? 'debug'
-      args += %W[--enable-debug=#{gdb} --disable-altivec]
-    end
-    if build.without? 'esd'
-      args << '--disable-esd'
-    end
+    args = ["--prefix=#{prefix}",
+            "--bindir=#{bin}",
+            "--datadir=#{docs}",
+            "--mandir=#{man}",
+            "--confdir=#{conf}",
+            "--libdir=#{lib}",
+            "--codecsdir=#{lib}/codecs",
+            "--cc=#{ENV.cc}",
+            "--host-cc=#{ENV.cc}",
+            "--target=#{arch}-Darwin",
+            "--language=#{lang}",
+            "--enable-macosx-bundle",
+            "--enable-macosx-finder",
+            "--enable-png",
+            "--enable-jpeg",
+            "--enable-liblzo",
+            "--enable-theora",
+            "--enable-libvorbis",
+            "--enable-libopus",
+            "--enable-mad",
+            "--disable-live",
+            "--disable-cdparanoia",
+            "--disable-enca",
+            "--disable-libcdio",
+            "--disable-toolame",
+            "--disable-xmms",
+            "--disable-musepack",
+            "--disable-x11",
+            "--disable-gl",
+            "--disable-arts",
+            "--disable-lirc",
+            "--disable-mng",
+            "--disable-gif",
+            "--disable-apple-ir"]
+    args << "--enable-menu"                  if build.with?    'osd' or  build.with?    'fribidi'
+    args << "--disable-fontconfig" \
+         << "--disable-freetype"             if build.without? 'osd' and build.without? 'fribidi'
+    args << "--enable-smb"                   if build.with?    'smb'
+    args << "--enable-debug=#{gdb}" \
+         << "--disable-altivec"              if build.with?    'debug'
+    args << "--disable-xvid" \
+         << "--disable-x264" \
+         << "--disable-faac" \
+         << "--disable-libdv" \
+         << "--disable-twolame"              if build.without? "encoders"
+    args << "--disable-smb"                  if build.without? "smb"
+    args << "--disable-apple-remote"         if build.without? "apple-remote"
+    args << "--disable-esd"                  if build.without? "esd"
+    args << "--disable-speex"                if build.without? "speex"
+    args << "--disable-fribidi"              if build.without? "fribidi"
+    args << "--disable-libdts"               if build.without? "dts"
+    args << "--disable-sdl"                  if build.without? "sdl"
+    args << "--disable-liba52"               if build.without? "a52"
+    args << "--disable-libschroedinger-lavc" \
+         << "--disable-libdirac-lavc"        if build.without? "dirac"
+    args << "--disable-aa"                   if build.without? "aa"
+    args << "--disable-caca"                 if build.without? "caca"
+
     if MacOS.prefer_64_bit?
-      args << '--disable-qtx'
+      args << "--disable-qtx"
     else
-      args << '--enable-qtx'
+      args << "--enable-qtx"
     end
     return args
   end
@@ -220,7 +235,6 @@ class MplayerDevel < Formula
   def install
     ENV.O1 if ENV.compiler == :llvm
     ENV.append_to_cflags "-mdynamic-no-pic" if Hardware.is_32_bit? && Hardware::CPU.intel? && ENV.compiler == :clang
-
     (buildpath/'VERSION').write "devel-r#{version}" + (revision > 0 ? "_#{revision}" : "")
 
     system "./configure", *configure_args
@@ -232,24 +246,15 @@ class MplayerDevel < Formula
     man1.install_symlink "#{player}.1" => "#{encoder}.1"
     docs.install 'DOCS/HTML' => 'html' if build.with? 'html-docs'
     docs.install 'DOCS/tech', 'AUTHORS', 'LICENSE', 'README', 'Changelog', 'Copyright'
-
     mv 'etc/example.conf', 'etc/mplayer.conf'
-    Pathname.glob('etc/*.conf').each do |src|
-      dst = conf/src.basename
-      if dst.exist? && ! %x(diff src dst).empty?
-        old = etc/(src.basename.to_s + ".old")
-        rm old if old.exist?
-        mv dst, old
-      end
-      conf.install src
-    end
+    conf.install Dir.glob('etc/*.conf')
   end
 end
 
 __END__
 diff -rupN original/configure patched/configure
 --- original/configure	2013-09-14 03:57:24.000000000 -0700
-+++ patched/configure	2014-07-10 04:35:43.000000000 -0700
++++ patched/configure	2014-07-10 19:01:04.000000000 -0700
 @@ -1507,8 +1507,7 @@ if test -e ffmpeg/mp_auto_pull ; then
  fi
  
@@ -372,8 +377,8 @@ diff -rupN original/configure patched/configure
  else
    echores "docbookx.dtd"
 diff -rupN original/ffmpeg/configure patched/ffmpeg/configure
---- original/ffmpeg/configure	2014-07-08 14:56:26.000000000 -0700
-+++ patched/ffmpeg/configure	2014-07-08 15:27:34.000000000 -0700
+--- original/ffmpeg/configure	2014-07-10 18:59:12.000000000 -0700
++++ patched/ffmpeg/configure	2014-07-10 19:01:04.000000000 -0700
 @@ -3915,7 +3915,7 @@ elif enabled ppc; then
          if ! enabled_any pic ppc64; then
              nogas=warn
@@ -384,8 +389,8 @@ diff -rupN original/ffmpeg/configure patched/ffmpeg/configure
          check_cflags -faltivec
  
 diff -rupN original/ffmpeg/libavutil/mem.h patched/ffmpeg/libavutil/mem.h
---- original/ffmpeg/libavutil/mem.h	2014-07-08 14:56:26.000000000 -0700
-+++ patched/ffmpeg/libavutil/mem.h	2014-07-08 15:17:09.000000000 -0700
+--- original/ffmpeg/libavutil/mem.h	2014-07-10 18:59:13.000000000 -0700
++++ patched/ffmpeg/libavutil/mem.h	2014-07-10 19:01:04.000000000 -0700
 @@ -51,7 +51,7 @@
          static const t __attribute__((aligned(n))) v
  #elif defined(__GNUC__)
@@ -397,7 +402,7 @@ diff -rupN original/ffmpeg/libavutil/mem.h patched/ffmpeg/libavutil/mem.h
      #define DECLARE_ASM_CONST(n,t,v)    __declspec(align(n)) static const t v
 diff -rupN original/libvo/vo_corevideo.h patched/libvo/vo_corevideo.h
 --- original/libvo/vo_corevideo.h	2013-07-15 18:33:46.000000000 -0700
-+++ patched/libvo/vo_corevideo.h	2014-07-08 15:10:26.000000000 -0700
++++ patched/libvo/vo_corevideo.h	2014-07-10 19:01:04.000000000 -0700
 @@ -26,6 +26,7 @@
  #import <Cocoa/Cocoa.h>
  #import <QuartzCore/QuartzCore.h>
@@ -408,7 +413,7 @@ diff -rupN original/libvo/vo_corevideo.h patched/libvo/vo_corevideo.h
  // MPlayer OS X VO Protocol
 diff -rupN original/libvo/vo_corevideo.m patched/libvo/vo_corevideo.m
 --- original/libvo/vo_corevideo.m	2013-07-15 18:33:46.000000000 -0700
-+++ patched/libvo/vo_corevideo.m	2014-07-08 15:11:25.000000000 -0700
++++ patched/libvo/vo_corevideo.m	2014-07-10 19:01:04.000000000 -0700
 @@ -25,6 +25,7 @@
  #include <sys/mman.h>
  #include <unistd.h>
