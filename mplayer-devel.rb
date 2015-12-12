@@ -1,3 +1,5 @@
+require 'formula'
+
 class MPlayerDevelDownloadStrategy < SubversionDownloadStrategy
 
   def initialize(name, resource)
@@ -21,23 +23,104 @@ class MPlayerDevelDownloadStrategy < SubversionDownloadStrategy
     dst = Pathname.new(File.join(Dir.pwd, "ffmpeg"))
     quiet_safe_system 'git', 'clone', '--no-checkout', @ffmpeg.cached_download, dst
     dst.cd { quiet_safe_system 'git', 'checkout', '-f', "4ea4d2f438c9a7eba37980c9a87be4b34943e4d5" }
+    quiet_safe_system 'svn', 'export', "-r", "1257", "svn://svn.mplayerhq.hu/dvdnav/trunk/libdvdnav/src", "libdvdnav"
+    quiet_safe_system 'svn', 'export', "-r", "1257", "svn://svn.mplayerhq.hu/dvdnav/trunk/libdvdread/src", "libdvdread4"
   end
+end
+
+class FormulaHamstringer < Requirement
+  fatal true
+  satisfy { ENV['BUILD_BROKEN_MPLAYER'] == 'yes' }
+  def message; "This formula is disabled (still a work in progress)" end
 end
 
 class MplayerDevel < Formula
 
-  desc "simpler mplayer build"
-  homepage "http://www.mplayerhq.hu/"
-  version "37559"
-  revision 6
-  url "svn://svn.mplayerhq.hu/mplayer/trunk", :using => MPlayerDevelDownloadStrategy
+  homepage 'http://www.mplayerhq.hu/'
+  conflicts_with 'mplayer', :because => 'Provides the same binaries.'
 
-  depends_on "pkg-config" => :build
-  depends_on "yasm" => :build
-  depends_on "freetype"
-  depends_on "mad"
+  ## OLDER WORKING VERSION
+  version "37559"
+  revision 8
+  url 'svn://svn.mplayerhq.hu/mplayer/trunk', :using => MPlayerDevelDownloadStrategy
 
   patch :DATA
+
+  option 'with-debug',           'Compile with debugging symbols'
+  option 'with-esd',             'Enable EsounD audio output'
+  option 'with-html-docs',       'Enable building HTML documentation'
+  option 'with-fribidi',         'Enable FriBidi Unicode support (implies --with-osd)'
+  option 'with-smb',             'Enable Samba support'
+  option 'with-speex',           'Enable Speex playback'
+  option 'with-dts',             'Enable non-passthrough DTS playback'
+  option 'with-sdl',             'Enable SDL video output'
+  option 'with-a52',             'Enable AC-3 codec support'
+  option 'with-aa',              'Enable animated ASCII art video output'
+  option 'with-caca',            'Enable animated ASCII art video output'
+  option 'without-osd',          'Disable on-screen display (menus, etc)'
+  option 'without-encoders',     'Build without common encoders (x264, xvid, etc.)'
+  option 'without-apple-remote', 'Disable Apple Infrared Remote support'
+
+  depends_on 'git'        => [:build, :optional]
+  depends_on 'subversion' => [:build, :optional]
+  depends_on 'pkg-config' => :build
+  depends_on 'yasm'       => :build
+
+  if build.with? 'html-docs'
+    depends_on 'docbook'     => :build
+    depends_on 'docbook-xsl' => :build
+  end
+
+  depends_on 'gcc' => :build if MacOS.version >= :mountain_lion
+
+  depends_on 'libiconv' => :optional
+  depends_on 'ncurses'  => :optional
+  depends_on 'zlib'     => :optional
+
+  depends_on 'lame'
+  depends_on 'libass'
+  depends_on 'libjpeg'
+  depends_on 'libmad'
+  depends_on 'libogg'
+  depends_on 'libpng'
+  depends_on 'libvorbis'
+  depends_on 'lzo'
+  depends_on 'opus'
+  depends_on 'theora'
+
+  if build.with? 'encoders'
+    depends_on 'faac'
+    depends_on 'libdv'
+    depends_on 'twolame'
+    depends_on 'x264'
+    depends_on 'xvid'
+  end
+
+  if build.with? 'osd' or build.with? 'fribidi'
+    depends_on 'fontconfig'
+    depends_on 'freetype'
+  end
+
+  if build.with? 'dirac'
+    depends_on 'dirac'
+    depends_on 'schroedinger'
+  end
+
+  depends_on 'esound' if build.with? 'esd'
+  depends_on 'fribidi' if build.with? 'fribidi'
+  depends_on 'samba' if build.with? 'smb'
+  depends_on 'speex' if build.with? 'speex'
+  depends_on 'libdca' if build.with? 'dts'
+  depends_on 'sdl' if build.with? 'sdl'
+  depends_on 'a52dec' if build.with? 'a52'
+  depends_on 'aalib' if build.with? 'aa'
+  depends_on 'libcaca' if build.with? 'caca'
+  depends_on 'openjpeg' if build.with? 'openjpeg'
+
+  fails_with :clang do
+    build 211
+    cause 'Inline asm errors during compile on 32bit Snow Leopard.'
+  end unless MacOS.prefer_64_bit?
 
   def arch
     if MacOS.prefer_64_bit?
@@ -47,80 +130,93 @@ class MplayerDevel < Formula
     end
   end
 
-  def playername
-    "mplayer"
-  end
+  def player;  'mplayer'          end
+  def encoder; 'mencoder'         end
+  def ident;   'midentify'        end
+  def conf;    etc/player         end
+  def docs;    share/'doc'/player end
 
-  def conf
-    etc/playername
-  end
-
-  def docs
-    share/"doc"/playername
+  def configure_args
+    args = ["--prefix=#{prefix}",
+            "--bindir=#{bin}",
+            "--datadir=#{docs}",
+            "--mandir=#{man}",
+            "--confdir=#{conf}",
+            "--libdir=#{lib}",
+            "--codecsdir=#{lib}/codecs",
+            "--cc=#{ENV.cc}",
+            "--host-cc=#{ENV.cc}",
+            "--target=#{arch}-Darwin",
+            "--language=en",
+            "--enable-macosx-bundle",
+            "--enable-macosx-finder",
+            "--enable-png",
+            "--enable-jpeg",
+            "--enable-liblzo",
+            "--enable-theora",
+            "--enable-libvorbis",
+            "--enable-libopus",
+            "--enable-mad",
+            "--disable-live",
+            "--disable-cdparanoia",
+            "--disable-enca",
+            "--disable-libcdio",
+            "--disable-toolame",
+            "--disable-xmms",
+            "--disable-musepack",
+            "--disable-x11",
+            "--disable-gl",
+            "--disable-arts",
+            "--disable-lirc",
+            "--disable-mng",
+            "--disable-gif",
+            "--disable-apple-ir"]
+    args << "--enable-menu" if build.with? 'osd' or build.with? 'fribidi'
+    args << "--disable-fontconfig" \
+         << "--disable-freetype" if build.without? 'osd' and build.without? 'fribidi'
+    args << "--enable-smb" if build.with? 'smb'
+    args << "--enable-debug=gdb3" \
+         << "--disable-altivec" if build.with? 'debug'
+    args << "--disable-xvid" \
+         << "--disable-x264" \
+         << "--disable-faac" \
+         << "--disable-libdv" \
+         << "--disable-twolame" if build.without? "encoders"
+    args << "--disable-libschroedinger-lavc" \
+         << "--disable-libdirac-lavc" if build.without? "dirac"
+    args << "--disable-smb" if build.without? "smb"
+    args << "--disable-apple-remote" if build.without? "apple-remote"
+    args << "--disable-esd" if build.without? "esd"
+    args << "--disable-speex" if build.without? "speex"
+    args << "--disable-fribidi" if build.without? "fribidi"
+    args << "--disable-libdca" if build.without? "dts"
+    args << "--disable-sdl" if build.without? "sdl"
+    args << "--disable-liba52" if build.without? "a52"
+    args << "--disable-aa" if build.without? "aa"
+    args << "--disable-caca" if build.without? "caca"
+    args << "--disable-qtx" if MacOS.prefer_64_bit?
+    args << "--enable-qtx" if !MacOS.prefer_64_bit?
+    args << "--extra-cflags=" + %x[pkg-config --cflags libopenjpeg].chomp if build.with? 'openjpeg'
+    return args
   end
 
   def install
-    system "./configure", "--disable-debug",
-                          "--prefix=#{prefix}",
-                          "--bindir=#{bin}",
-                          "--datadir=#{docs}",
-                          "--mandir=#{man}",
-                          "--confdir=#{conf}",
-                          "--libdir=#{lib}",
-                          "--codecsdir=#{lib}/codecs",
-                          "--language=en",
-                          "--disable-aa",
-                          "--disable-altivec",
-                          "--disable-apple-ir",
-                          "--disable-apple-remote",
-                          "--disable-arts",
-                          "--disable-caca",
-                          "--disable-cdparanoia",
-                          "--disable-enca",
-                          "--disable-esd",
-                          "--disable-faac",
-                          "--disable-fontconfig",
-                          "--disable-fribidi",
-                          "--disable-gif",
-                          "--disable-gl",
-                          "--disable-jpeg",
-                          "--disable-liba52",
-                          "--disable-libcdio",
-                          "--disable-libdca",
-                          "--disable-libdirac-lavc",
-                          "--disable-libdv",
-                          "--disable-liblzo",
-                          "--disable-libopus",
-                          "--disable-libschroedinger-lavc",
-                          "--disable-libvorbis",
-                          "--disable-lirc",
-                          "--disable-live",
-                          "--disable-mng",
-                          "--disable-musepack",
-                          "--disable-png",
-                          "--disable-qtx",
-                          "--disable-sdl",
-                          "--disable-smb",
-                          "--disable-speex",
-                          "--disable-theora",
-                          "--disable-toolame",
-                          "--disable-twolame",
-                          "--disable-x11",
-                          "--disable-x264",
-                          "--disable-xmms",
-                          "--disable-xvid",
-                          "--enable-corevideo",
-                          "--enable-coreaudio",
-                          "--enable-freetype",
-                          "--enable-mad",
-                          "--enable-menu"
+    ENV.O1 if ENV.compiler == :llvm
+    ENV.append_to_cflags "-mdynamic-no-pic" if Hardware.is_32_bit? && Hardware::CPU.intel? && ENV.compiler == :clang
+    (buildpath/'VERSION').write "devel-r#{version}" + (revision > 0 ? "_#{revision}" : "")
 
-    system "make", "-j#{ENV.make_jobs}", "mplayer", "V=1"
-    bin.install "mplayer" => playername
-    man1.install "DOCS/man/en/mplayer.1" => "#{playername}.1"
-    docs.install "DOCS/tech", "AUTHORS", "LICENSE", "README", "Changelog", "Copyright"
-    mv "etc/example.conf", "etc/#{playername}.conf"
-    Pathname.glob("etc/*.conf").each do |src|
+    system "./configure", *configure_args
+    system "make", "-j#{ENV.make_jobs}", "mplayer", "mencoder", "V=1"
+    system "make", "doc" if build.with? 'html-docs'
+
+    bin.install 'mplayer' => player, 'mencoder' => encoder, 'TOOLS/midentify.sh' => ident
+    man1.install 'DOCS/man/en/mplayer.1' => "#{player}.1"
+    man1.install_symlink "#{player}.1" => "#{encoder}.1"
+    docs.install 'DOCS/HTML' => 'html' if build.with? 'html-docs'
+    docs.install 'DOCS/tech', 'AUTHORS', 'LICENSE', 'README', 'Changelog', 'Copyright'
+
+    mv 'etc/example.conf', 'etc/mplayer.conf'
+    Pathname.glob('etc/*.conf').each do |src|
       dst = conf/src.basename
       if dst.exist?
         bak = dst.dirname/(dst.basename.to_s + ".bak")
@@ -128,11 +224,7 @@ class MplayerDevel < Formula
         cp dst, bak
       end
     end
-    conf.install Dir.glob("etc/*.conf")
-  end
-
-  test do
-    system "true"
+    conf.install Dir.glob('etc/*.conf')
   end
 end
 
