@@ -37,11 +37,11 @@ end
 class MplayerDevel < Formula
 
   homepage 'http://www.mplayerhq.hu/'
+  desc "experimental devel version of mplayer, with bells and whistles"
   conflicts_with 'mplayer', :because => 'Provides the same binaries.'
 
-  ## OLDER WORKING VERSION
   version "37559"
-  revision 8
+  revision 9
   url 'svn://svn.mplayerhq.hu/mplayer/trunk', :using => MPlayerDevelDownloadStrategy
 
   patch :DATA
@@ -60,6 +60,7 @@ class MplayerDevel < Formula
   option 'without-osd',          'Disable on-screen display (menus, etc)'
   option 'without-encoders',     'Build without common encoders (x264, xvid, etc.)'
   option 'without-apple-remote', 'Disable Apple Infrared Remote support'
+  option 'with-bs2b',            'Build with support for Bauer stereophonic transformation filter'
 
   depends_on 'git'        => [:build, :optional]
   depends_on 'subversion' => [:build, :optional]
@@ -113,6 +114,7 @@ class MplayerDevel < Formula
   depends_on 'libdca' if build.with? 'dts'
   depends_on 'sdl' if build.with? 'sdl'
   depends_on 'a52dec' if build.with? 'a52'
+  depends_on 'libbs2b' if build.with? 'bs2b'
   depends_on 'aalib' if build.with? 'aa'
   depends_on 'libcaca' if build.with? 'caca'
   depends_on 'openjpeg' if build.with? 'openjpeg'
@@ -197,6 +199,11 @@ class MplayerDevel < Formula
     args << "--disable-qtx" if MacOS.prefer_64_bit?
     args << "--enable-qtx" if !MacOS.prefer_64_bit?
     args << "--extra-cflags=" + %x[pkg-config --cflags libopenjpeg].chomp if build.with? 'openjpeg'
+    if build.with? 'bs2b'
+      bs2b = Formula['libbs2b']
+      args << "--enable-libbs2b" \
+           << "--extra-cflags=-I#{bs2b.opt_include}/bs2b"
+    end
     return args
   end
 
