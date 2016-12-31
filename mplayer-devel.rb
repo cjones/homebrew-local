@@ -42,7 +42,7 @@ class MplayerDevel < Formula
 
   version "37559"
   revision 9
-  url 'svn://svn.mplayerhq.hu/mplayer/trunk', :using => MPlayerDevelDownloadStrategy
+  url 'svn://svn.mplayerhq.hu/mplayer/trunk', :using => MPlayerDevelDownloadStrategy, :revision => 37559
 
   patch :DATA
 
@@ -203,13 +203,15 @@ class MplayerDevel < Formula
       bs2b = Formula['libbs2b']
       args << "--enable-libbs2b" \
            << "--extra-cflags=-I#{bs2b.opt_include}/bs2b"
+    else
+      args << "--disable-libbs2b"
     end
     return args
   end
 
   def install
     ENV.O1 if ENV.compiler == :llvm
-    ENV.append_to_cflags "-mdynamic-no-pic" if Hardware.is_32_bit? && Hardware::CPU.intel? && ENV.compiler == :clang
+    ENV.append_to_cflags "-mdynamic-no-pic" if Hardware::CPU.is_32_bit? && Hardware::CPU.intel? && ENV.compiler == :clang
     (buildpath/'VERSION').write "devel-r#{version}" + (revision > 0 ? "_#{revision}" : "")
 
     system "./configure", *configure_args
